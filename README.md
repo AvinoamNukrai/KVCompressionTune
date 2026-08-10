@@ -35,7 +35,7 @@ The system has four components, all running on **unmodified stock vLLM**:
 | Workload | Optimal Preset | Compression | PPL Delta | vs Default |
 |----------|---------------|-------------|-----------|------------|
 | Chat     | k8v4          | 2.25x       | -0.02%    | Prevents quality violation (+0.98% with naive 4bit) |
-| RAG      | 4bit_nc       | 3.00x       | +0.98%    | +57.6% utility over baseline |
+| RAG      | 4bit_nc+L5    | 2.82x       | +0.91%    | +57.6% utility over baseline |
 | Batch    | 4bit_nc       | 3.00x       | +0.98%    | +14.8% utility over baseline |
 
 TurboQuant is the experimental vehicle. The contribution is the finding (compression policy matters), the methodology (per-layer sensitivity + workload-aware utility), and the practical tool.
