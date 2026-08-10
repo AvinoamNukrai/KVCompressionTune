@@ -1,0 +1,379 @@
+\documentclass[10pt]{article}
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage[hidelinks]{hyperref}
+\usepackage{titlesec}
+\usepackage{parskip}
+\usepackage{fancyhdr}
+\emergencystretch=2em
+
+\titleformat{\section}{\large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\normalfont\bfseries}{\thesubsection}{1em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\itshape KVCompressionTune (2026)}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+\renewcommand{\footrulewidth}{0pt}
+
+\title{\textbf{KVCompressionTune: A Study on Workload-Aware KV-Cache\\Compression Configuration for an Open-Source LLM Serving Engine}}
+\author{Avinoam Nukrai -- 206996132 \quad Jad Mahajne -- 318978152}
+\date{August 2026}
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+Large language model (LLM) serving is increasingly constrained by the memory consumed by the key-value (KV) cache, whose size grows linearly with sequence length and the number of concurrent sequences. For long-context and high-concurrency deployments, the KV cache can dominate GPU memory and limit the number of requests that can be served concurrently. KV-cache quantization addresses this bottleneck by storing cached keys and values at lower precision, trading some model quality for increased cache capacity \cite{vllm,turboquant}.
+
+We build on \textbf{vLLM}, a widely used open-source LLM serving engine \cite{vllm}, and specifically on \textbf{TurboQuant}, its built-in KV-cache quantization mechanism, merged upstream in April 2026. TurboQuant uses Hadamard rotation followed by Lloyd--Max scalar quantization for its 3- and 4-bit key modes and uniform quantization for values, while the \texttt{k8v4} preset stores keys in FP8 \cite{turboquant,vllm-tq-docs}. vLLM 0.21.0 exposes four named TurboQuant presets (\texttt{k8v4}, \texttt{4bit\_nc}, \texttt{k3v4\_nc}, \texttt{3bit\_nc}), with documented storage-compression ratios ranging from approximately $2.6\times$ to $4.9\times$ before accounting for layer protection \cite{vllm-tq-docs}. For dense models, the implementation additionally protects the first two and last two layers by keeping them at full precision; this lowers the whole-model compression ratio. Our tuner accounts for the protected layers using the analytical payload model described in Section~\ref{sec:expsetup}.
+
+This representation choice is distinct from vLLM's block-based KV-cache memory management through PagedAttention and its optional prefix-caching mechanisms. PagedAttention manages how KV-cache blocks are allocated and shared; TurboQuant determines how the keys and values stored in those blocks are represented \cite{vllm}. Our extension therefore operates on the representation/configuration axis and is complementary to cache allocation, reuse, and eviction mechanisms.
+
+Despite TurboQuant's integration, practitioners still face a deployment-specific configuration problem: which preset should be used for a given model, hardware platform, and workload? The answer is non-obvious for three reasons that we substantiate empirically in this report. First, the offline PPL degradation used to enforce our quality budget is not normally available as an online quality signal for free-form production requests, so an overly aggressive configuration can violate the deployment's quality constraint without an automatic warning from vLLM. Second, preset feasibility can be hardware-dependent: in our stock vLLM 0.21.0 tests, \texttt{k8v4} failed to initialize on an RTX 3090 (Ampere, SM 8.6) while running successfully on an RTX 4090 (Ada, SM 8.9), whereas the three \texttt{\_nc} presets ran on both. Third, the same preset can have dramatically different effects across models: \texttt{3bit\_nc} increases PPL by 54.6\% on Qwen3-1.7B but only 0.69\% on Mistral-7B-v0.3 in our screening experiments.
+
+The broader observation that quantization sensitivity is non-uniform across layers is well established. HAWQ demonstrated layer-dependent sensitivity for weight quantization using Hessian information \cite{hawq}; KVQuant introduced per-layer sensitivity-weighted non-uniform datatypes for KV-cache quantization \cite{kvquant}; and KVTuner and KVmix explicitly search or allocate layer-wise mixed precision \cite{kvtuner,kvmix}. RateQuant instead formulates mixed-precision allocation across attention heads using rate-distortion theory \cite{ratequant}. These methods target finer-grained quantization policies. Our project asks a different systems question: given the TurboQuant configurations already exposed by stock vLLM, can we select a configuration according to deployment-specific objectives such as chat decode latency, RAG prefill latency and cache capacity, or batch throughput, while enforcing a quality constraint?
+
+This report therefore asks a narrower, practical question: given the presets vLLM already ships, does the best choice depend on workload and model, and can that choice be automated? We answer both empirically. Reading the vLLM source also showed that TurboQuant's component parameters (key precision, value precision, and norm correction) are represented separately internally even though the CLI exposes only four named presets, and that user-supplied protected layers are added to the default boundary floor rather than replacing it. Both observations shape our experimental grid and suggest small, well-scoped opportunities for an upstream vLLM contribution.
+
+\section{Extension Design}
+The baseline system---stock vLLM with TurboQuant---exposes four fixed compression presets but provides no built-in mechanism for choosing among them according to the model, hardware, workload, and quality requirement. Our extension adds a policy-selection layer on top without modifying vLLM's source: given a \emph{profiled} model, target GPU, and workload, it recommends the preset and protection budget that maximizes a workload-specific utility function subject to a hard quality constraint. The recommendation is applied at engine-launch time; live per-request reconfiguration inside a running vLLM engine is outside the scope of this project. Every component below is implemented and tested, and none requires a vLLM fork or a custom kernel.
+
+\textbf{No Workload-Aware Configuration Selection:} A vLLM user selects one static \texttt{--kv-cache-dtype} preset when launching an engine, and that configuration remains fixed for the lifetime of that engine. vLLM does not connect this choice to a deployment-specific workload objective or an explicit measured quality budget. We address this with a decision engine that chooses a configuration for each profiled (model, GPU, workload) deployment context using measurements collected by our benchmark and tuner.
+
+\textbf{TurboQuant-Specific Layer Sensitivity Was Uncharacterized:} Prior work already establishes that quantization sensitivity can vary across layers \cite{hawq,kvquant,kvtuner,kvmix}; what was unclear for our setting was how sensitivity is distributed under TurboQuant on the models we study, and whether vLLM's fixed boundary-protection rule protects the layers that matter most. We built a \textbf{layer sensitivity profiler} with two backends: a fast PyTorch reimplementation of TurboQuant's quantization math that hooks HuggingFace Transformers to rank layers, and a slower vLLM ground-truth backend that quantizes exactly one real layer at a time through vLLM's engine. The latter is used to validate whether the fast backend measures the same phenomenon as the deployed implementation.
+
+\textbf{No Standardized, Reproducible Benchmarking:} Comparing configurations fairly requires identical, repeatable workloads. We built a \textbf{benchmark harness} that launches an unmodified vLLM engine with a given configuration, replays a frozen, seeded workload trace, and records latency, throughput, device-level VRAM, quality, and retrieval metrics. Traces are frozen to JSON so every configuration cell sees byte-identical prompts, and completed cells are checkpointed by a content hash so an interrupted cluster job can resume instead of restarting.
+
+\textbf{No Automatic Preset or Protection Selection:} Using the screening data, we built a \textbf{workload-aware tuner} that searches the (preset $\times$ protection budget) space with Optuna's TPE sampler, warm-started from the screening grid. Each workload profile supplies its own multiplicative utility function (Table~\ref{tab:profiles}), combining relative latency/throughput improvement with the analytical memory-compression ratio. A configuration whose PPL degradation exceeds the workload's threshold receives zero utility regardless of its speed or memory benefit.
+
+\textbf{No Auditable, Hardware-Aware Recommendation:} Finally, a \textbf{config advisor} takes a profiled (model, GPU, workload) triple and returns recommended vLLM launch flags together with evidence such as measured $\Delta$PPL and utility. It also applies the feasibility rules encoded from our hardware tests and can fall back to the next-best feasible configuration when the top preset is unavailable on the target GPU.
+
+\section{Experimental Setup}
+\label{sec:expsetup}
+
+\textbf{Workload Profiles and Quality Budgets:}
+We evaluate three deployment profiles because they value different parts of serving performance. \emph{Chat} uses short prompts followed by relatively long generation, so the user mainly feels the speed of token generation after the first token. We therefore make chat primarily TPOT-sensitive and give it the strictest quality budget. \emph{RAG} uses long retrieved context followed by a short answer, so processing the prompt and producing the first token are especially important; RAG therefore emphasizes TTFT and cache capacity. \emph{Batch} represents offline bulk processing, where the main goal is to process as many output tokens as possible per second, so it emphasizes throughput.
+
+Quality is measured relative to the FP16 baseline using
+\[
+\Delta\mathrm{PPL}_{\mathrm{rel}}
+=
+\frac{\mathrm{PPL}_{\mathrm{cfg}}-\mathrm{PPL}_{\mathrm{FP16}}}
+     {\mathrm{PPL}_{\mathrm{FP16}}}.
+\]
+A configuration is considered viable only if this relative PPL increase stays below the workload's threshold: $0.5\%$ for chat, $1.0\%$ for RAG, and $2.0\%$ for batch. If a configuration exceeds the threshold, the tuner assigns it utility $0$, regardless of its speed or compression benefit. All prompts are synthetically generated and seeded for determinism; screening/tuning use one seed while final validation replays a disjoint held-out seed that was never used during tuning.
+
+\textbf{Latency and Throughput Metrics:}
+The three performance metrics used by the utility functions measure different stages of inference:
+\begin{itemize}\itemsep=2pt
+\item \textbf{Time to First Token (TTFT)} is the time from the request's arrival until the first generated output token becomes available. It includes scheduling and prompt/prefill processing before the first token is produced. Lower TTFT is better. This is especially important for RAG, where the prompt is long and the generated answer is relatively short.
+\item \textbf{Time Per Output Token (TPOT)} measures generation speed \emph{after} the first output token. For a request with end-to-end latency $T_{\mathrm{e2e}}$, TTFT $T_{\mathrm{first}}$, and $N_{\mathrm{out}}>1$ generated tokens, our harness computes
+\[
+\mathrm{TPOT}
+=
+\frac{T_{\mathrm{e2e}}-T_{\mathrm{first}}}
+     {N_{\mathrm{out}}-1}.
+\]
+Lower TPOT means subsequent tokens appear faster. This is the main latency metric for chat because chat requests generate many tokens after the first one.
+\item \textbf{Throughput (TP)} measures how much generation work the system completes per unit time. For a workload trace,
+\[
+\mathrm{TP}
+=
+\frac{\text{total number of generated output tokens}}
+     {\text{wall-clock time for the workload}}
+\quad\text{tokens/s}.
+\]
+Higher throughput is better. This is the main performance metric for batch processing.
+\end{itemize}
+We additionally record device-level VRAM with a background NVML sampling thread, WikiText-2 perplexity under chunked prefill, and needle-in-haystack retrieval accuracy as a long-context sanity check.
+
+\textbf{Normalized Performance Terms:}
+The tuner does not combine raw milliseconds and tokens/s directly. Instead, each candidate configuration is compared with the FP16 baseline, producing dimensionless improvement factors:
+\[
+S_{\mathrm{TPOT}}
+=
+\frac{\mathrm{TPOT}_{\mathrm{FP16}}}
+     {\mathrm{TPOT}_{\mathrm{cfg}}},
+\qquad
+S_{\mathrm{TTFT}}
+=
+\frac{\mathrm{TTFT}_{\mathrm{FP16}}}
+     {\mathrm{TTFT}_{\mathrm{cfg}}},
+\qquad
+S_{\mathrm{TP}}
+=
+\frac{\mathrm{TP}_{\mathrm{cfg}}}
+     {\mathrm{TP}_{\mathrm{FP16}}}.
+\]
+The ratios are intentionally oriented so that \textbf{larger is always better}: a value of $1$ means the candidate matches FP16, a value greater than $1$ means an improvement, and a value below $1$ means a regression. For example, $S_{\mathrm{TPOT}}=1.10$ means that the candidate generates subsequent tokens about $10\%$ faster than the baseline in this normalized score.
+
+\textbf{Compression Model:}
+Because vLLM pre-allocates a KV-cache pool, peak allocated VRAM does not directly reveal how many more tokens fit after quantization. The tuner therefore uses an analytical cache-capacity ratio, $R_{\mathrm{mem}}$. For a model with $L$ layers and $s$ protected full-precision layers,
+\[
+R_{\mathrm{mem}}
+=
+\frac{4L}
+     {4s+(L-s)b_{\mathrm{preset}}},
+\]
+where FP16 keys plus values are modeled as 4 bytes per dimension and $b_{\mathrm{preset}}$ is $1.5$ for \texttt{k8v4}, $1.0$ for \texttt{4bit\_nc}, $0.875$ for \texttt{k3v4\_nc}, and $0.75$ for \texttt{3bit\_nc}. Thus, $R_{\mathrm{mem}}=1$ is the FP16 baseline, while $R_{\mathrm{mem}}=3$ means that the analytical KV payload is three times smaller, or equivalently that roughly three times as much KV data can fit in the same payload budget. This is the exact analytical model used by \texttt{src/tuner.py}; it is not a direct measurement of the packed physical KV-cache footprint and does not include all implementation metadata.
+
+\textbf{Workload Utility Functions:}
+The tuner combines the normalized performance term that matters most for each workload with $R_{\mathrm{mem}}$ using a weighted geometric mean:
+\begin{table}[h]
+\centering\small
+\caption{Utility function and PPL constraint per workload profile (\texttt{configs/profiles.json}).}
+\label{tab:profiles}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Workload} & \textbf{Utility} & \textbf{PPL constraint} \\
+\midrule
+Chat  & $U_{\mathrm{chat}}=S_{\mathrm{TPOT}}^{0.7}R_{\mathrm{mem}}^{0.3}$ & $\le 0.5\%$ \\
+RAG   & $U_{\mathrm{rag}}=R_{\mathrm{mem}}^{0.5}S_{\mathrm{TTFT}}^{0.5}$ & $\le 1.0\%$ \\
+Batch & $U_{\mathrm{batch}}=S_{\mathrm{TP}}^{0.8}R_{\mathrm{mem}}^{0.2}$ & $\le 2.0\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The exponents express the workload priorities. Chat gives $70\%$ of the utility weight to faster generation (TPOT) and $30\%$ to cache compression. RAG weights cache compression and TTFT equally. Batch gives $80\%$ of the weight to throughput and $20\%$ to compression. Because every normalized term equals $1$ for FP16, the FP16 baseline has utility $U=1$. A viable candidate with $U>1$ is preferred to FP16 under that workload's priorities, while $U<1$ is worse overall. The quality constraint is applied \emph{before} this comparison: if the candidate exceeds the allowed $\Delta$PPL, its utility is set to $0$ even if it is faster or more compressed.
+
+\textbf{Hardware and Models:} Primary hardware is an RTX 4090 (Ada, SM 8.9); an RTX 3090 (Ampere, SM 8.6) is used specifically as a cross-generation feasibility check. The primary model is Qwen3-4B (36 layers); Qwen3-1.7B (28 layers), Llama-3.1-8B, and Mistral-7B-v0.3 are used for the generalization study. We also attempted Gemma-2-2B; under our vLLM 0.21.0 setup, all TurboQuant presets failed after the unrelated initial length configuration issue was corrected (discussed in Step 5).
+
+\textbf{Software Environment:} All reported vLLM experiments use stock vLLM 0.21.0. Optuna is used for the tuner's search, and the current test suite contains 60 collected pytest tests covering the profiler, harness, workload/profile logic, tuner, advisor, and model-topology helpers. The repository's \texttt{requirements.txt} pins vLLM 0.21.0 for reproduction.
+
+\textbf{Protocol:} The study runs in five cumulative phases: layer-sensitivity profiling; a screening grid over presets and protection sets; workload-aware auto-tuning with a protection-budget ablation; held-out statistical validation; and cross-model/cross-architecture generalization.
+
+\section{Results \& Discussion}
+
+\subsection*{Step 1: Baseline Characterization --- Layer Sensitivity Profiling}
+Before tuning anything, we profiled per-layer sensitivity to 3-bit key quantization (with 4-bit values) in isolation, to examine whether vLLM's fixed first/last-two-layer floor protects the layers that matter most in Qwen3-4B.
+
+\textbf{Key Observations} (Figure~\ref{fig:layersens}):
+\begin{itemize}\itemsep=1pt
+\item Layer 0 is by far the most sensitive measured layer: its $\Delta$PPL is $+4.59$, compared with $+0.24$ for the next-worst measured layer (about $19\times$ larger).
+\item Layer 1---protected by the floor alongside layer 0---is nearly insensitive ($+0.01$), while layers 30--33 outside the floor show measurable sensitivity ($+0.07$ to $+0.15$).
+\item Local simulated quantization error correlates with downstream sensitivity (Spearman $\rho=0.40$, $p=0.016$), but imperfectly: layer 5 has high local error yet effectively zero end-to-end impact. This mismatch becomes important in Step 4.
+\end{itemize}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.62\linewidth]{figures/fig6_layer_sensitivity.pdf}
+\caption{Per-layer $\Delta$PPL for layers with a directly measured value (Qwen3-4B, single-layer 3-bit isolation). Red: layer 0 (most sensitive). Blue: layers the default floor protects. Grey: unprotected.}
+\label{fig:layersens}
+\end{figure}
+
+\subsection*{Step 2: From Sensitivity Profiling to Preset Screening}
+With per-layer sensitivity mapped, we ran a 34-cell screening grid on Qwen3-4B / RTX 4090: the FP16 baseline (2 reps, no protection-axis variation) plus all four TurboQuant presets crossed with four protection sets and two reps each ($2 + 4\times4\times2=34$). The purpose was to determine whether preset choice or protection choice dominates the quality/performance trade-off.
+
+\textbf{Key Observations} (Table~\ref{tab:exp1}, Figure~\ref{fig:ppl_tpot}):
+\begin{itemize}\itemsep=1pt
+\item The mildest preset (\texttt{k8v4}) matches the FP16 baseline within the observed screening noise; the most aggressive preset (\texttt{3bit\_nc}) costs about $+3.4\%$ PPL, a 0.36-PPL spread.
+\item The best protection scheme recovers at most about 0.09 PPL for a fixed preset. On this screening metric, preset choice therefore produces roughly four times the PPL range of protection choice.
+\item Decode overhead (TPOT) increases with quantization aggressiveness: about $+9\%$ for \texttt{k8v4}, rising to roughly $+16$--$19\%$ for \texttt{3bit\_nc}.
+\item Needle-in-haystack retrieval remains near 1.00 across almost all configurations; the main outlier is \texttt{k8v4} with floor-only protection (0.95).
+\end{itemize}
+
+\begin{table}[h]
+\centering\small
+\caption{Preset screening summary, Qwen3-4B / RTX 4090, floor protection. Compression is the analytical, floor-adjusted $R_{\mathrm{mem}}$ used by the tuner; it is not a direct packed-memory measurement.}
+\label{tab:exp1}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Preset} & \textbf{PPL} & \textbf{$\Delta$PPL} & \textbf{Analytical $R_{\mathrm{mem}}$} \\
+\midrule
+FP16 baseline & 10.35 & --- & 1.00$\times$ \\
+\texttt{k8v4}      & 10.34 & $-0.10\%$ & 2.25$\times$ \\
+\texttt{4bit\_nc}  & 10.45 & $+0.93\%$ & 3.00$\times$ \\
+\texttt{k3v4\_nc}  & 10.66 & $+3.01\%$ & 3.27$\times$ \\
+\texttt{3bit\_nc}  & 10.70 & $+3.38\%$ & 3.60$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.48\linewidth]{figures/fig1_ppl_by_preset.pdf}\hfill
+\includegraphics[width=0.48\linewidth]{figures/fig2_tpot_overhead.pdf}
+\caption{(a) WikiText-2 perplexity and (b) decode-time overhead, by preset (floor protection).}
+\label{fig:ppl_tpot}
+\end{figure}
+
+These findings expose several trade-offs that motivate workload-specific selection:
+\begin{itemize}\itemsep=1pt
+\item \textbf{Prefill and decode can favor different configurations.} Aggressive quantization clearly raises TPOT because decode pays quantization/dequantization overhead. In early screening we also observed large TTFT improvements under some compressed configurations, but TTFT at two repetitions was too noisy for a strong standalone claim; the held-out workload utilities in Step 4 therefore use five repeated measurements.
+\item \textbf{Peak allocated VRAM does not shrink in the way a naive measurement suggests.} vLLM v1 pre-allocates a KV-cache pool according to its memory budget, so compression primarily increases the number of tokens/requests that fit in that pool rather than proportionally lowering peak device allocation. We therefore use $R_{\mathrm{mem}}$ as a capacity proxy rather than raw peak-VRAM reduction.
+\item \textbf{Hardware feasibility precedes optimality.} In our vLLM 0.21.0 smoke tests, \texttt{k8v4} failed to initialize on the RTX 3090 while all three \texttt{\_nc} presets ran; the same \texttt{k8v4} preset ran on the RTX 4090. The advisor therefore treats feasibility as a hardware-dependent filter before utility optimization.
+\end{itemize}
+
+\subsection*{Step 3: From Screening to Auto-Tuning and a Protection-Budget Ablation}
+Preset choice clearly dominates the screening PPL range, but does extra protection help once a preset is fixed? We ran the Optuna tuner over 36 configurations (20 unique preset/budget configurations carried over from screening plus 16 refinement cells) and separately examined the protection budget for \texttt{k3v4\_nc}.
+
+\textbf{Key Observations} (Figure~\ref{fig:ablation}):
+\begin{itemize}\itemsep=1pt
+\item The tuner selects different launch-time configurations for the three workload profiles: chat $\to$ \texttt{k8v4}; RAG $\to$ \texttt{4bit\_nc} with layer 5 additionally protected; batch $\to$ \texttt{4bit\_nc} with floor-only protection.
+\item For \texttt{k3v4\_nc}, adding layer 33 accounts for about 90\% of the total PPL recovery from the extra protection explored around that operating point, moving PPL from 10.662 to 10.570. A third extra protected layer improves PPL by a further 0.009.
+\item The best measured budget is 3 extra layers (PPL 10.561). Budgets 4--8 were also measured and show no additional improvement or slight regression, so the benefit saturates rather than increasing monotonically with protection budget.
+\item Even at budget 3, \texttt{k3v4\_nc} misses the batch PPL threshold (10.554) by 0.007 PPL; protection closes most of the gap without crossing the constraint.
+\end{itemize}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.55\linewidth]{figures/fig5_protection_ablation.pdf}
+\caption{Protection-budget ablation for \texttt{k3v4\_nc}. All budgets 1--8 were measured; improvement saturates after budget 3 and higher budgets are flat-to-regressing.}
+\label{fig:ablation}
+\end{figure}
+
+\subsection*{Step 4: From Auto-Tuning to Held-Out Statistical Validation}
+To avoid selecting and evaluating on the same traces, we re-evaluated the configurations chosen during tuning on disjoint held-out traces that were not used during screening or tuning (5 repetitions). For latency/throughput comparisons we report paired $t$-tests and Wilcoxon signed-rank tests with Holm--Bonferroni correction across 30 comparisons. PPL is deterministic under our teacher-forced evaluation, so repeated PPL values do not provide an informative sampling distribution; we therefore report PPL differences directly rather than interpreting their repeated-run $p$-values.
+
+\textbf{Key Observations} (Table~\ref{tab:exp3}, Figure~\ref{fig:utility}):
+\begin{itemize}\itemsep=1pt
+\item Utility, normalized so the FP16 baseline scores 1.0, improves by $+19.4\%$ for chat, $+57.6\%$ for RAG, and $+14.8\%$ for batch for the pre-selected tuner configurations.
+\item \texttt{3bit\_nc} fails every workload's quality threshold on held-out data ($\Delta\mathrm{PPL}=+3.43\%$), so the most aggressive preset is not viable for any of the three Qwen3-4B profiles under our quality budgets.
+\item Latency metrics have low but non-zero run-to-run variance and support the paired performance comparisons; PPL is identical across repetitions for a fixed configuration and trace set.
+\end{itemize}
+
+\begin{table}[h]
+\centering\small
+\caption{Held-out validation of the configurations selected during tuning, Qwen3-4B / RTX 4090, $n=5$ reps. Utility gain is relative to FP16. Compression is analytical $R_{\mathrm{mem}}$.}
+\label{tab:exp3}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Workload} & \textbf{Preset} & \textbf{$R_{\mathrm{mem}}$} & \textbf{$\Delta$PPL} & \textbf{Utility gain} \\
+\midrule
+Chat  & \texttt{k8v4}        & 2.25$\times$ & $-0.02\%$ & $+19.4\%$ \\
+RAG   & \texttt{4bit\_nc+L5} & 2.82$\times$ & $+0.91\%$ & $+57.6\%$ \\
+Batch & \texttt{4bit\_nc}    & 3.00$\times$ & $+0.98\%$ & $+14.8\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.55\linewidth]{figures/fig3_utility_gain.pdf}
+\caption{Utility gain of the pre-selected configuration over the FP16 baseline on held-out traces.}
+\label{fig:utility}
+\end{figure}
+
+Two trade-offs are especially important:
+\begin{itemize}\itemsep=1pt
+\item \textbf{Workload-aware selection is useful even though one conservative preset can be feasible everywhere on this GPU.} Applying \texttt{k8v4} to all three Qwen3-4B workloads satisfies the quality thresholds, but leaves about 8.4\% RAG utility and 2.7\% batch utility unclaimed relative to the workload-specific choices. Conversely, applying \texttt{4bit\_nc} globally improves utility for RAG/batch but violates chat's 0.5\% PPL threshold. Thus, the result is not that no global preset is feasible; it is that no single tested preset is simultaneously the best choice for all three objectives.
+\item \textbf{Statistics-guided layer protection is a negative result on held-out data.} The positional extra-protection choice (layer 2) produces slightly lower PPL than the statistics-guided layer-5 choice (10.436 vs. 10.442), while the utility difference is not statistically significant ($p=0.33$). More importantly, floor-only \texttt{4bit\_nc} has higher RAG utility than \texttt{4bit\_nc+L5} on held-out data because both pass the PPL constraint and the added protection reduces $R_{\mathrm{mem}}$. This shows that the profiler is useful for characterization, but its local error ranking does not reliably translate into a better end-to-end protection policy.
+\end{itemize}
+
+\subsection*{Step 5: From Single-Model Validation to Cross-Model Generalization}
+Finally, we asked whether the model dependence observed on Qwen3-4B extends across model size and architecture family. Qwen3-1.7B, Llama-3.1-8B, and Mistral-7B-v0.3 each received a two-repetition screening-phase sweep using the same workload harness. These are real committed measurements, but unlike Qwen3-4B they have not yet received the independent five-repetition held-out validation protocol.
+
+\textbf{Key Observations} (Table~\ref{tab:exp4}, Figure~\ref{fig:gen}):
+\begin{itemize}\itemsep=1pt
+\item Qwen3-1.7B is far more fragile than Qwen3-4B: \texttt{3bit\_nc} costs $+54.6\%$ PPL versus $+3.4\%$ on Qwen3-4B (about a $16\times$ difference), while \texttt{4bit\_nc} costs about six times more relative PPL.
+\item \texttt{k8v4} improves measured PPL on Qwen3-1.7B ($-2.03\%$). This could reflect a regularization-like effect or evaluation variation, but we did not run additional experiments to establish a mechanism.
+\item Llama-3.1-8B and especially Mistral-7B-v0.3 are more robust than the Qwen models under the screened presets. Mistral tolerates \texttt{3bit\_nc} for RAG at only $+0.69\%$ PPL and obtains the largest screening-phase utility gain in the study ($+73.8\%$).
+\item For Qwen3-1.7B batch, no TurboQuant candidate beats the FP16 baseline in utility; the best TurboQuant candidate, \texttt{k8v4}, scores 0.989, so the correct recommendation under this profile is to keep the FP16 baseline.
+\end{itemize}
+
+\begin{table}[h]
+\centering\small
+\caption{Best tested TurboQuant configuration and utility gain relative to FP16 per (model, workload). Qwen3-4B uses held-out validation ($n=5$); other models are screening-phase ($n=2$). The Qwen3-1.7B batch row is shown for comparison even though FP16 is the actual optimum.}
+\label{tab:exp4}
+\begin{tabular}{@{}llccc@{}}
+\toprule
+\textbf{Model} & \textbf{WL} & \textbf{Preset} & \textbf{$\Delta$PPL} & \textbf{Util. gain} \\
+\midrule
+Qwen3-4B         & Chat  & \texttt{k8v4}        & $-0.02\%$ & $+19.4\%$ \\
+                 & RAG   & \texttt{4bit\_nc+L5} & $+0.91\%$ & $+57.6\%$ \\
+                 & Batch & \texttt{4bit\_nc}    & $+0.98\%$ & $+14.8\%$ \\
+\midrule
+Qwen3-1.7B       & Chat  & \texttt{k8v4} & $-2.03\%$ & $+24.9\%$ \\
+                 & RAG   & \texttt{k8v4} & $-2.03\%$ & $+10.0\%$ \\
+                 & Batch & \texttt{k8v4}$^{\dagger}$ & $-2.03\%$ & $-1.1\%$ \\
+\midrule
+Llama-3.1-8B     & Chat  & \texttt{4bit\_nc} & $+0.39\%$ & $+30.9\%$ \\
+                 & RAG   & \texttt{4bit\_nc} & $+0.39\%$ & $+57.7\%$ \\
+                 & Batch & \texttt{3bit\_nc} & $+1.78\%$ & $+20.4\%$ \\
+\midrule
+Mistral-7B-v0.3  & Chat  & \texttt{4bit\_nc} & $+0.05\%$ & $+30.4\%$ \\
+                 & RAG   & \texttt{3bit\_nc} & $+0.69\%$ & $+73.8\%$ \\
+                 & Batch & \texttt{3bit\_nc} & $+0.69\%$ & $+18.7\%$ \\
+\bottomrule
+\end{tabular}
+\\[2pt]
+{\footnotesize $^{\dagger}$Below baseline utility (1.0); FP16 is the recommended choice for this workload.}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.48\linewidth]{figures/fig4_generalization.pdf}\hfill
+\includegraphics[width=0.48\linewidth]{figures/fig7_utility_all_models.pdf}
+\caption{(a) $|\Delta\mathrm{PPL}|$ relative to FP16 on a log scale. (b) Utility gain over FP16 across the four successfully evaluated models and three workload profiles.}
+\label{fig:gen}
+\end{figure}
+
+Two measurement caveats are important when interpreting the cross-model results:
+\begin{itemize}\itemsep=1pt
+\item \textbf{Llama's needle-retrieval metric is unreliable in our harness.} It is 0.0 under every tested configuration, including FP16, indicating a model-family prompt/chat-template mismatch rather than a quantization effect. We therefore exclude this metric from claims about Llama quantization quality.
+\item \textbf{Gemma-2-2B is incompatible with TurboQuant in our tested vLLM 0.21.0 setup.} The first run failed because of an unrelated \texttt{max\_model\_len} configuration error. After correcting it, all \texttt{turboquant\_*} presets still failed with \texttt{NotImplementedError} in \texttt{unify\_kv\_cache\_spec\_page\_size}, consistent with Gemma-2's alternating local/global attention producing KV-cache specifications that this TurboQuant path could not unify. We report this as a version/setup-specific compatibility finding rather than claiming universal incompatibility with all future vLLM versions.
+\end{itemize}
+
+\section{Conclusion}
+This project shows that the best KV-cache compression preset is workload-dependent and model-dependent, and that this selection can be automated without modifying vLLM's source. A configuration that is acceptable for one workload can violate another workload's quality budget, and the same aggressive preset that has little effect on Mistral-7B-v0.3 can severely degrade Qwen3-1.7B. On Qwen3-4B / RTX 4090, \texttt{k8v4} is a conservative globally feasible choice, but it is not utility-optimal for RAG or batch; more aggressive global choices such as \texttt{4bit\_nc} improve those workloads but fail the chat quality constraint. The practical value therefore comes from choosing a configuration for the deployment objective rather than assuming one preset is universally best.
+
+We also report an important negative result: statistics-guided per-layer protection does not outperform simpler positional/floor protection on held-out utility. In the screening grid, preset choice produced about four times the PPL range of protection choice, and on held-out RAG data the added layer-5 protection slightly improves PPL but lowers utility because it sacrifices analytical cache capacity after the quality threshold is already satisfied. The main contribution is therefore workload- and model-aware preset selection, with layer sensitivity serving primarily as characterization rather than as the dominant optimization lever.
+
+Key contributions include a dual-backend layer-sensitivity profiler, a reproducible benchmark harness with frozen seeded traces and content-addressed checkpoints, a workload-aware Optuna tuner, and a hardware-aware config advisor with an auditable recommendation. The current repository contains 60 collected tests. Across the primary study, cross-model sweeps, layer profiling, and the Gemma compatibility attempt, the project executes more than 150 experimental configurations/runs; full five-repetition held-out validation is currently limited to Qwen3-4B.
+
+\textbf{Future Work.} Several directions remain open. \emph{Per-request configuration} within a single running engine would require changes to vLLM's allocator and attention/quantization path rather than launch-time flags. \emph{More accurate capacity modeling} could replace the tuner's payload-level $R_{\mathrm{mem}}$ proxy with measured usable KV-block capacity or a packed-storage model that includes metadata. \emph{Per-model quantizer calibration} could test whether the stock scalar codebooks remain optimal for different model-specific rotated KV distributions. \emph{Extending the full $n=5$ held-out validation protocol} to Qwen3-1.7B, Llama-3.1-8B, and Mistral-7B-v0.3 would give the model-dependence claim the same statistical weight as the primary Qwen3-4B result. Finally, two small upstream candidates remain: exposing more of TurboQuant's internal configuration space through the public interface, and making the dense-model boundary-protection width configurable rather than fixed at two layers per side.
+
+All code, raw experiment cells, analysis scripts, and tests are available at \url{https://github.com/AvinoamNukrai/KVCompressionTune}. The committed \texttt{requirements.txt} pins vLLM 0.21.0, the version used for the reported vLLM experiments.
+
+\begin{thebibliography}{9}
+\small
+
+\bibitem{vllm}
+W. Kwon, Z. Li, S. Zhuang, Y. Sheng, L. Zheng, C. H. Yu, J. E. Gonzalez, H. Zhang, and I. Stoica.
+\newblock Efficient Memory Management for Large Language Model Serving with PagedAttention.
+\newblock \emph{SOSP}, 2023.
+
+\bibitem{turboquant}
+A. Zandieh, M. Daliri, M. Hadian, and V. Mirrokni.
+\newblock TurboQuant: Online Vector Quantization with Near-optimal Distortion Rate.
+\newblock \emph{ICLR}, 2026.
+
+\bibitem{vllm-tq-docs}
+vLLM Project.
+\newblock TurboQuant implementation documentation, vLLM 0.21.0.
+\newblock \url{https://docs.vllm.ai/en/v0.21.0/api/vllm/model_executor/layers/quantization/turboquant/}.
+
+\bibitem{hawq}
+Z. Dong, Z. Yao, A. Gholami, M. W. Mahoney, and K. Keutzer.
+\newblock HAWQ: Hessian AWare Quantization of Neural Networks with Mixed-Precision.
+\newblock \emph{ICCV}, 2019.
+
+\bibitem{kvquant}
+C. Hooper, S. Kim, H. Mohammadzadeh, M. W. Mahoney, Y. S. Shao, K. Keutzer, and A. Gholami.
+\newblock KVQuant: Towards 10 Million Context Length LLM Inference with KV Cache Quantization.
+\newblock arXiv:2401.18079, 2024.
+
+\bibitem{kvtuner}
+X. Li, Z. Xing, Y. Li, L. Qu, H.-L. Zhen, Y. Yao, W. Liu, S. J. Pan, and M. Yuan.
+\newblock KVTuner: Sensitivity-Aware Layer-Wise Mixed-Precision KV Cache Quantization for Efficient and Nearly Lossless LLM Inference.
+\newblock \emph{ICML}, 2025.
+
+\bibitem{kvmix}
+F. Li, S. Liu, W. Wu, S. Nie, and J. Wang.
+\newblock KVmix: Gradient-Based Layer Importance-Aware Mixed-Precision Quantization for KV Cache.
+\newblock \emph{AAAI}, 2026.
+
+\bibitem{ratequant}
+F. Zuo, Z. Zhou, H. Cong, X. Xi, and H. F. Leung.
+\newblock RateQuant: Optimal Mixed-Precision KV Cache Quantization via Rate-Distortion Theory.
+\newblock arXiv:2605.06675, 2026.
+
+\end{thebibliography}
+
+\end{document}
