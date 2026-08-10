@@ -1,0 +1,827 @@
+{
+  "chat": {
+    "kv_cache_dtype": "turboquant_k8v4",
+    "skip_layers": [],
+    "effective_skip_layers": [
+      0,
+      1,
+      34,
+      35
+    ],
+    "n_protected_total": 4,
+    "utility": 1.196,
+    "ppl": 10.343142736740015,
+    "r_mem": 2.25,
+    "ppl_delta_pct": -0.04,
+    "evidence": {
+      "chat_tpot_ms": 12.528817962766734,
+      "rag_ttft_ms": 4096.87380194664,
+      "batch_tps": 1060.1999999999998,
+      "needle_acc": 0.95
+    }
+  },
+  "rag": {
+    "kv_cache_dtype": "turboquant_4bit_nc",
+    "skip_layers": [
+      5
+    ],
+    "effective_skip_layers": [
+      0,
+      1,
+      5,
+      34,
+      35
+    ],
+    "n_protected_total": 5,
+    "utility": 1.5408,
+    "ppl": 10.44221919904283,
+    "r_mem": 2.824,
+    "ppl_delta_pct": 0.92,
+    "evidence": {
+      "chat_tpot_ms": 13.095209830092344,
+      "rag_ttft_ms": 4153.741538524628,
+      "batch_tps": 1020.65,
+      "needle_acc": 1.0
+    }
+  },
+  "batch": {
+    "kv_cache_dtype": "turboquant_4bit_nc",
+    "skip_layers": [],
+    "effective_skip_layers": [
+      0,
+      1,
+      34,
+      35
+    ],
+    "n_protected_total": 4,
+    "utility": 1.1451,
+    "ppl": 10.446390079907404,
+    "r_mem": 3.0,
+    "ppl_delta_pct": 0.96,
+    "evidence": {
+      "chat_tpot_ms": 13.133440935738912,
+      "rag_ttft_ms": 4526.0986328125,
+      "batch_tps": 1017.5999999999999,
+      "needle_acc": 1.0
+    }
+  },
+  "baseline": {
+    "ppl": 10.34678056671049,
+    "chat_tpot_ms": 11.429155433820668,
+    "rag_ttft_ms": 3492.7069664001465,
+    "batch_tps": 1130.6
+  },
+  "meta-llama/Llama-3.1-8B": {
+    "chat": {
+      "kv_cache_dtype": "turboquant_4bit_nc",
+      "skip_layers": [],
+      "effective_skip_layers": [
+        0,
+        1,
+        30,
+        31
+      ],
+      "n_protected_total": 4,
+      "utility": 1.3091,
+      "ppl": 5.3917834503001965,
+      "r_mem": 2.909,
+      "ppl_delta_pct": 0.39,
+      "evidence": {
+        "chat_tpot_ms": 20.482228937172565,
+        "rag_ttft_ms": 5817.973983287811,
+        "batch_tps": 672.05,
+        "needle_acc": 0.0
+      },
+      "alternatives": [
+        {
+          "kv_cache_dtype": "turboquant_4bit_nc",
+          "skip_layers": [],
+          "effective_skip_layers": [
+            0,
+            1,
+            30,
+            31
+          ],
+          "n_protected_total": 4,
+          "utility": 1.3091,
+          "ppl": 5.3917834503001965,
+          "r_mem": 2.909,
+          "ppl_delta_pct": 0.39,
+          "evidence": {
+            "chat_tpot_ms": 20.482228937172565,
+            "rag_ttft_ms": 5817.973983287811,
+            "batch_tps": 672.05,
+            "needle_acc": 0.0
+          }
+        },
+        {
+          "kv_cache_dtype": "turboquant_4bit_nc",
+          "skip_layers": [
+            5
+          ],
+          "effective_skip_layers": [
+            0,
+            1,
+            5,
+            30,
+            31
+          ],
+          "n_protected_total": 5,
+          "utility": 1.28,
+          "ppl": 5.390337314179495,
+          "r_mem": 2.723,
+          "ppl_delta_pct": 0.36,
+          "evidence": {
+            "chat_tpot_ms": 20.560096718524882,
+            "rag_ttft_ms": 5749.931091070175,
+            "batch_tps": 673.35,
+            "needle_acc": 0.0
+          }
+        },
+        {
+          "kv_cache_dtype": "turboquant_k8v4",
+          "skip_layers": [],
+          "effective_skip_layers": [
+            0,
+            1,
+            30,
+            31
+          ],
+          "n_protected_total": 4,
+          "utility": 1.2296,
+          "ppl": 5.388962826242054,
+          "r_mem": 2.207,
+          "ppl_delta_pct": 0.33,
+          "evidence": {
+            "chat_tpot_ms": 19.898090105897786,
+            "rag_ttft_ms": 5458.8522255420685,
+            "batch_tps": 686.75,
+            "needle_acc": 0.0
+          }
+        }
+      ]
+    },
+    "rag": {
+      "kv_cache_dtype": "turboquant_4bit_nc",
+      "skip_layers": [],
+      "effective_skip_layers": [
+        0,
+        1,
+        30,
+        31
+      ],
+      "n_protected_total": 4,
+      "utility": 1.5767,
+      "ppl": 5.3917834503001965,
+      "r_mem": 2.909,
+      "ppl_delta_pct": 0.39,
+      "evidence": {
+        "chat_tpot_ms": 20.482228937172565,
+        "rag_ttft_ms": 5817.973983287811,
+        "batch_tps": 672.05,
+        "needle_acc": 0.0
+      },
+      "alternatives": [
+        {
+          "kv_cache_dtype": "turboquant_4bit_nc",
+          "skip_layers": [],
+          "effective_skip_layers": [
+            0,
+            1,
+            30,
+            31
+          ],
+          "n_protected_total": 4,
+          "utility": 1.5767,
+          "ppl": 5.3917834503001965,
+          "r_mem": 2.909,
+          "ppl_delta_pct": 0.39,
+          "evidence": {
+            "chat_tpot_ms": 20.482228937172565,
+            "rag_ttft_ms": 5817.973983287811,
+            "batch_tps": 672.05,
+            "needle_acc": 0.0
+          }
+        },
+        {
+          "kv_cache_dtype": "turboquant_4bit_nc",
+          "skip_layers": [
+            5
+          ],
+          "effective_skip_layers": [
+            0,
+            1,
+            5,
+            30,
+            31
+          ],
+          "n_protected_total": 5,
+          "utility": 1.5346,
+          "ppl": 5.390337314179495,
+          "r_mem": 2.723,
+          "ppl_delta_pct": 0.36,
+          "evidence": {
+            "chat_tpot_ms": 20.560096718524882,
+            "rag_ttft_ms": 5749.931091070175,
+            "batch_tps": 673.35,
+            "needle_acc": 0.0
+          }
+        },
+        {
+          "kv_cache_dtype": "turboquant_k8v4",
+          "skip_layers": [],
+          "effective_skip_layers": [
+            0,
+            1,
+            30,
+            31
+          ],
+          "n_protected_total": 4,
+          "utility": 1.4178,
+          "ppl": 5.388962826242054,
+          "r_mem": 2.207,
+          "ppl_delta_pct": 0.33,
+          "evidence": {
+            "chat_tpot_ms": 19.898090105897786,
+            "rag_ttft_ms": 5458.8522255420685,
+            "batch_tps": 686.75,
+            "needle_acc": 0.0
+          }
+        }
+      ]
+    },
+    "batch": {
+      "kv_cache_dtype": "turboquant_3bit_nc",
+      "skip_layers": [],
+      "effective_skip_layers": [
+        0,
+        1,
+        30,
+        31
+      ],
+      "n_protected_total": 4,
+      "utility": 1.2036,
+      "ppl": 5.466565263587799,
+      "r_mem": 3.459,
+      "ppl_delta_pct": 1.78,
+      "evidence": {
+        "chat_tpot_ms": 20.81637478187412,
+        "rag_ttft_ms": 5811.375200748444,
+        "batch_tps": 649.1,
+        "needle_acc": 0.0
+      },
+      "alternatives": [
+        {
+          "kv_cache_dtype": "turboquant_3bit_nc",
+          "skip_layers": [],
+          "effective_skip_layers": [
+            0,
+            1,
+            30,
+            31
+          ],
+          "n_protected_total": 4,
+          "utility": 1.2036,
+          "ppl": 5.466565263587799,
+          "r_mem": 3.459,
+          "ppl_delta_pct": 1.78,
+          "evidence": {
+            "chat_tpot_ms": 20.81637478187412,
+            "rag_ttft_ms": 5811.375200748444,
+            "batch_tps": 649.1,
+            "needle_acc": 0.0
+          }
+        },
+        {
+          "kv_cache_dtype": "turboquant_4bit_nc",
+          "skip_layers": [],
+          "effective_skip_layers": [
+            0,
+            1,
+            30,
+            31
+          ],
+          "n_protected_total": 4,
+          "utility": 1.1954,
+          "ppl": 5.3917834503001965,
+          "r_mem": 2.909,
+          "ppl_delta_pct": 0.39,
+          "evidence": {
+            "chat_tpot_ms": 20.482228937172565,
+            "rag_ttft_ms": 5817.973983287811,
+            "batch_tps": 672.05,
+            "needle_acc": 0.0
+          }
+        },
+        {
+          "kv_cache_dtype": "turboquant_4bit_nc",
+          "skip_layers": [
+            5
+          ],
+          "effective_skip_layers": [
+            0,
+            1,
+            5,
+            30,
+            31
+          ],
+          "n_protected_total": 5,
+          "utility": 1.1815,
+          "ppl": 5.390337314179495,
+          "r_mem": 2.723,
+          "ppl_delta_pct": 0.36,
+          "evidence": {
+            "chat_tpot_ms": 20.560096718524882,
+            "rag_ttft_ms": 5749.931091070175,
+            "batch_tps": 673.35,
+            "needle_acc": 0.0
+          }
+        },
+        {
+          "kv_cache_dtype": "turboquant_k8v4",
+          "skip_layers": [],
+          "effective_skip_layers": [
+            0,
+            1,
+            30,
+            31
+          ],
+          "n_protected_total": 4,
+          "utility": 1.1509,
+          "ppl": 5.388962826242054,
+          "r_mem": 2.207,
+          "ppl_delta_pct": 0.33,
+          "evidence": {
+            "chat_tpot_ms": 19.898090105897786,
+            "rag_ttft_ms": 5458.8522255420685,
+            "batch_tps": 686.75,
+            "needle_acc": 0.0
+          }
+        }
+      ]
+    },
+    "baseline": {
+      "ppl": 5.371090522064661,
+      "chat_tpot_ms": 19.04221290474628,
+      "rag_ttft_ms": 4971.8711614608765,
+      "batch_tps": 702.2
+    }
+  },
+  "mistralai/Mistral-7B-v0.3": {
+    "chat": {
+      "kv_cache_dtype": "turboquant_4bit_nc",
+      "skip_layers": [],
+      "effective_skip_layers": [
+        0,
+        1,
+        30,
+        31
+      ],
+      "n_protected_total": 4,
+      "utility": 1.3035,
+      "ppl": 4.21048472479114,
+      "r_mem": 2.909,
+      "ppl_delta_pct": 0.05,
+      "evidence": {
+        "chat_tpot_ms": 19.517984529891386,
+        "rag_ttft_ms": 7122.368091344833,
+        "batch_tps": 644.25,
+        "needle_acc": 0.95
+      },
+      "alternatives": [
+        {
+          "kv_cache_dtype": "turboquant_4bit_nc",
+          "skip_layers": [],
+          "effective_skip_layers": [
+            0,
+            1,
+            30,
+            31
+          ],
+          "n_protected_total": 4,
+          "utility": 1.3035,
+          "ppl": 4.21048472479114,
+          "r_mem": 2.909,
+          "ppl_delta_pct": 0.05,
+          "evidence": {
+            "chat_tpot_ms": 19.517984529891386,
+            "rag_ttft_ms": 7122.368091344833,
+            "batch_tps": 644.25,
+            "needle_acc": 0.95
+          }
+        },
+        {
+          "kv_cache_dtype": "turboquant_4bit_nc",
+          "skip_layers": [
+            5
+          ],
+          "effective_skip_layers": [
+            0,
+            1,
+            5,
+            30,
+            31
+          ],
+          "n_protected_total": 5,
+          "utility": 1.2816,
+          "ppl": 4.213391322968232,
+          "r_mem": 2.723,
+          "ppl_delta_pct": 0.12,
+          "evidence": {
+            "chat_tpot_ms": 19.43885710615279,
+            "rag_ttft_ms": 7072.515547275543,
+            "batch_tps": 644.9,
+            "needle_acc": 0.95
+          }
+        },
+        {
+          "kv_cache_dtype": "turboquant_k8v4",
+          "skip_layers": [],
+          "effective_skip_layers": [
+            0,
+            1,
+            30,
+            31
+          ],
+          "n_protected_total": 4,
+          "utility": 1.224,
+          "ppl": 4.209271226858582,
+          "r_mem": 2.207,
+          "ppl_delta_pct": 0.02,
+          "evidence": {
+            "chat_tpot_ms": 18.969464296573506,
+            "rag_ttft_ms": 6718.581962585449,
+            "batch_tps": 659.4,
+            "needle_acc": 0.95
+          }
+        }
+      ]
+    },
+    "rag": {
+      "kv_cache_dtype": "turboquant_3bit_nc",
+      "skip_layers": [],
+      "effective_skip_layers": [
+        0,
+        1,
+        30,
+        31
+      ],
+      "n_protected_total": 4,
+      "utility": 1.7384,
+      "ppl": 4.237357500087695,
+      "r_mem": 3.459,
+      "ppl_delta_pct": 0.69,
+      "evidence": {
+        "chat_tpot_ms": 19.92257147685101,
+        "rag_ttft_ms": 7247.366386651993,
+        "batch_tps": 621.4000000000001,
+        "needle_acc": 0.85
+      },
+      "alternatives": [
+        {
+          "kv_cache_dtype": "turboquant_3bit_nc",
+          "skip_layers": [],
+          "effective_skip_layers": [
+            0,
+            1,
+            30,
+            31
+          ],
+          "n_protected_total": 4,
+          "utility": 1.7384,
+          "ppl": 4.237357500087695,
+          "r_mem": 3.459,
+          "ppl_delta_pct": 0.69,
+          "evidence": {
+            "chat_tpot_ms": 19.92257147685101,
+            "rag_ttft_ms": 7247.366386651993,
+            "batch_tps": 621.4000000000001,
+            "needle_acc": 0.85
+          }
+        },
+        {
+          "kv_cache_dtype": "turboquant_4bit_nc",
+          "skip_layers": [],
+          "effective_skip_layers": [
+            0,
+            1,
+            30,
+            31
+          ],
+          "n_protected_total": 4,
+          "utility": 1.608,
+          "ppl": 4.21048472479114,
+          "r_mem": 2.909,
+          "ppl_delta_pct": 0.05,
+          "evidence": {
+            "chat_tpot_ms": 19.517984529891386,
+            "rag_ttft_ms": 7122.368091344833,
+            "batch_tps": 644.25,
+            "needle_acc": 0.95
+          }
+        },
+        {
+          "kv_cache_dtype": "turboquant_4bit_nc",
+          "skip_layers": [
+            5
+          ],
+          "effective_skip_layers": [
+            0,
+            1,
+            5,
+            30,
+            31
+          ],
+          "n_protected_total": 5,
+          "utility": 1.5613,
+          "ppl": 4.213391322968232,
+          "r_mem": 2.723,
+          "ppl_delta_pct": 0.12,
+          "evidence": {
+            "chat_tpot_ms": 19.43885710615279,
+            "rag_ttft_ms": 7072.515547275543,
+            "batch_tps": 644.9,
+            "needle_acc": 0.95
+          }
+        },
+        {
+          "kv_cache_dtype": "turboquant_k8v4",
+          "skip_layers": [],
+          "effective_skip_layers": [
+            0,
+            1,
+            30,
+            31
+          ],
+          "n_protected_total": 4,
+          "utility": 1.442,
+          "ppl": 4.209271226858582,
+          "r_mem": 2.207,
+          "ppl_delta_pct": 0.02,
+          "evidence": {
+            "chat_tpot_ms": 18.969464296573506,
+            "rag_ttft_ms": 6718.581962585449,
+            "batch_tps": 659.4,
+            "needle_acc": 0.95
+          }
+        }
+      ]
+    },
+    "batch": {
+      "kv_cache_dtype": "turboquant_3bit_nc",
+      "skip_layers": [],
+      "effective_skip_layers": [
+        0,
+        1,
+        30,
+        31
+      ],
+      "n_protected_total": 4,
+      "utility": 1.1872,
+      "ppl": 4.237357500087695,
+      "r_mem": 3.459,
+      "ppl_delta_pct": 0.69,
+      "evidence": {
+        "chat_tpot_ms": 19.92257147685101,
+        "rag_ttft_ms": 7247.366386651993,
+        "batch_tps": 621.4000000000001,
+        "needle_acc": 0.85
+      },
+      "alternatives": [
+        {
+          "kv_cache_dtype": "turboquant_3bit_nc",
+          "skip_layers": [],
+          "effective_skip_layers": [
+            0,
+            1,
+            30,
+            31
+          ],
+          "n_protected_total": 4,
+          "utility": 1.1872,
+          "ppl": 4.237357500087695,
+          "r_mem": 3.459,
+          "ppl_delta_pct": 0.69,
+          "evidence": {
+            "chat_tpot_ms": 19.92257147685101,
+            "rag_ttft_ms": 7247.366386651993,
+            "batch_tps": 621.4000000000001,
+            "needle_acc": 0.85
+          }
+        },
+        {
+          "kv_cache_dtype": "turboquant_4bit_nc",
+          "skip_layers": [],
+          "effective_skip_layers": [
+            0,
+            1,
+            30,
+            31
+          ],
+          "n_protected_total": 4,
+          "utility": 1.1804,
+          "ppl": 4.21048472479114,
+          "r_mem": 2.909,
+          "ppl_delta_pct": 0.05,
+          "evidence": {
+            "chat_tpot_ms": 19.517984529891386,
+            "rag_ttft_ms": 7122.368091344833,
+            "batch_tps": 644.25,
+            "needle_acc": 0.95
+          }
+        },
+        {
+          "kv_cache_dtype": "turboquant_4bit_nc",
+          "skip_layers": [
+            5
+          ],
+          "effective_skip_layers": [
+            0,
+            1,
+            5,
+            30,
+            31
+          ],
+          "n_protected_total": 5,
+          "utility": 1.1659,
+          "ppl": 4.213391322968232,
+          "r_mem": 2.723,
+          "ppl_delta_pct": 0.12,
+          "evidence": {
+            "chat_tpot_ms": 19.43885710615279,
+            "rag_ttft_ms": 7072.515547275543,
+            "batch_tps": 644.9,
+            "needle_acc": 0.95
+          }
+        },
+        {
+          "kv_cache_dtype": "turboquant_k8v4",
+          "skip_layers": [],
+          "effective_skip_layers": [
+            0,
+            1,
+            30,
+            31
+          ],
+          "n_protected_total": 4,
+          "utility": 1.1379,
+          "ppl": 4.209271226858582,
+          "r_mem": 2.207,
+          "ppl_delta_pct": 0.02,
+          "evidence": {
+            "chat_tpot_ms": 18.969464296573506,
+            "rag_ttft_ms": 6718.581962585449,
+            "batch_tps": 659.4,
+            "needle_acc": 0.95
+          }
+        }
+      ]
+    },
+    "baseline": {
+      "ppl": 4.208347670124195,
+      "chat_tpot_ms": 18.03533444306113,
+      "rag_ttft_ms": 6330.689376592636,
+      "batch_tps": 683.85
+    }
+  },
+  "Qwen/Qwen3-1.7B": {
+    "chat": {
+      "kv_cache_dtype": "turboquant_k8v4",
+      "skip_layers": [],
+      "effective_skip_layers": [
+        0,
+        1,
+        26,
+        27
+      ],
+      "n_protected_total": 4,
+      "utility": 1.2486,
+      "ppl": 13.157076187951944,
+      "r_mem": 2.154,
+      "ppl_delta_pct": -2.03,
+      "evidence": {
+        "chat_tpot_ms": 5.83661174378966,
+        "rag_ttft_ms": 2509.799498319626,
+        "batch_tps": 1912.35,
+        "needle_acc": 0.95
+      },
+      "alternatives": [
+        {
+          "kv_cache_dtype": "turboquant_k8v4",
+          "skip_layers": [],
+          "effective_skip_layers": [
+            0,
+            1,
+            26,
+            27
+          ],
+          "n_protected_total": 4,
+          "utility": 1.2486,
+          "ppl": 13.157076187951944,
+          "r_mem": 2.154,
+          "ppl_delta_pct": -2.03,
+          "evidence": {
+            "chat_tpot_ms": 5.83661174378966,
+            "rag_ttft_ms": 2509.799498319626,
+            "batch_tps": 1912.35,
+            "needle_acc": 0.95
+          }
+        }
+      ]
+    },
+    "rag": {
+      "kv_cache_dtype": "turboquant_k8v4",
+      "skip_layers": [],
+      "effective_skip_layers": [
+        0,
+        1,
+        26,
+        27
+      ],
+      "n_protected_total": 4,
+      "utility": 1.1002,
+      "ppl": 13.157076187951944,
+      "r_mem": 2.154,
+      "ppl_delta_pct": -2.03,
+      "evidence": {
+        "chat_tpot_ms": 5.83661174378966,
+        "rag_ttft_ms": 2509.799498319626,
+        "batch_tps": 1912.35,
+        "needle_acc": 0.95
+      },
+      "alternatives": [
+        {
+          "kv_cache_dtype": "turboquant_k8v4",
+          "skip_layers": [],
+          "effective_skip_layers": [
+            0,
+            1,
+            26,
+            27
+          ],
+          "n_protected_total": 4,
+          "utility": 1.1002,
+          "ppl": 13.157076187951944,
+          "r_mem": 2.154,
+          "ppl_delta_pct": -2.03,
+          "evidence": {
+            "chat_tpot_ms": 5.83661174378966,
+            "rag_ttft_ms": 2509.799498319626,
+            "batch_tps": 1912.35,
+            "needle_acc": 0.95
+          }
+        }
+      ]
+    },
+    "batch": {
+      "kv_cache_dtype": "turboquant_k8v4",
+      "skip_layers": [],
+      "effective_skip_layers": [
+        0,
+        1,
+        26,
+        27
+      ],
+      "n_protected_total": 4,
+      "utility": 0.9893,
+      "ppl": 13.157076187951944,
+      "r_mem": 2.154,
+      "ppl_delta_pct": -2.03,
+      "evidence": {
+        "chat_tpot_ms": 5.83661174378966,
+        "rag_ttft_ms": 2509.799498319626,
+        "batch_tps": 1912.35,
+        "needle_acc": 0.95
+      },
+      "alternatives": [
+        {
+          "kv_cache_dtype": "turboquant_k8v4",
+          "skip_layers": [],
+          "effective_skip_layers": [
+            0,
+            1,
+            26,
+            27
+          ],
+          "n_protected_total": 4,
+          "utility": 0.9893,
+          "ppl": 13.157076187951944,
+          "r_mem": 2.154,
+          "ppl_delta_pct": -2.03,
+          "evidence": {
+            "chat_tpot_ms": 5.83661174378966,
+            "rag_ttft_ms": 2509.799498319626,
+            "batch_tps": 1912.35,
+            "needle_acc": 0.95
+          }
+        }
+      ]
+    },
+    "baseline": {
+      "ppl": 13.429551647315295,
+      "chat_tpot_ms": 5.769148369891419,
+      "rag_ttft_ms": 1410.468351840973,
+      "batch_tps": 2348.15
+    }
+  }
+}

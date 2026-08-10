@@ -42,7 +42,7 @@ PROFILE_NAMES = ["chat", "rag", "batch"]
 
 ARM_LABELS = {
     "chat": {
-        ("turboquant_k8v4", ()): "AutoTune (k8v4)",
+        ("turboquant_k8v4", ()): "Tuned pick (k8v4)",
         ("turboquant_4bit_nc", ()): "vLLM default (4bit)",
         ("turboquant_3bit_nc", ()): "Aggressive (3bit)",
         ("auto", ()): "Baseline (FP16)",
@@ -50,36 +50,36 @@ ARM_LABELS = {
     "rag": {
         ("auto", ()): "Baseline (FP16)",
         ("turboquant_4bit_nc", ()): "vLLM default (4bit)",
-        ("turboquant_4bit_nc", (2,)): "AutoTune pos (4bit+L2)",
-        ("turboquant_4bit_nc", (5,)): "AutoTune stat (4bit+L5)",
+        ("turboquant_4bit_nc", (2,)): "Tuned, positional (4bit+L2)",
+        ("turboquant_4bit_nc", (5,)): "Tuned, stats-guided (4bit+L5)",
         ("turboquant_k8v4", ()): "k8v4 ref",
         ("turboquant_3bit_nc", ()): "Aggressive (3bit)",
     },
     "batch": {
         ("auto", ()): "Baseline (FP16)",
-        ("turboquant_4bit_nc", ()): "AutoTune (4bit)",
+        ("turboquant_4bit_nc", ()): "Tuned pick (4bit)",
         ("turboquant_k8v4", ()): "k8v4 ref",
         ("turboquant_3bit_nc", ()): "Aggressive (3bit)",
     },
 }
 
 KEY_COMPARISONS = [
-    ("chat", "auto_vs_autotune",
+    ("chat", "auto_vs_tuned",
      ("auto", ()), ("turboquant_k8v4", ()),
-     "Chat: baseline vs AutoTune pick (k8v4)"),
+     "Chat: baseline vs tuned pick (k8v4)"),
     ("chat", "auto_vs_naive",
      ("auto", ()), ("turboquant_4bit_nc", ()),
      "Chat: baseline vs naive 4bit"),
-    ("chat", "naive_vs_autotune",
+    ("chat", "naive_vs_tuned",
      ("turboquant_4bit_nc", ()), ("turboquant_k8v4", ()),
-     "Chat: naive 4bit vs AutoTune k8v4"),
+     "Chat: naive 4bit vs tuned k8v4"),
 
     ("rag", "auto_vs_default",
      ("auto", ()), ("turboquant_4bit_nc", ()),
      "RAG: baseline vs vLLM default (4bit)"),
-    ("rag", "auto_vs_autotune",
+    ("rag", "auto_vs_tuned",
      ("auto", ()), ("turboquant_4bit_nc", (5,)),
-     "RAG: baseline vs AutoTune stat (4bit+L5)"),
+     "RAG: baseline vs tuned stat (4bit+L5)"),
     ("rag", "default_vs_stat",
      ("turboquant_4bit_nc", ()), ("turboquant_4bit_nc", (5,)),
      "RAG: vLLM default vs stats-guided protection"),
@@ -90,9 +90,9 @@ KEY_COMPARISONS = [
      ("turboquant_4bit_nc", (2,)), ("turboquant_4bit_nc", (5,)),
      "RAG: H1b — positional vs stats-guided"),
 
-    ("batch", "auto_vs_autotune",
+    ("batch", "auto_vs_tuned",
      ("auto", ()), ("turboquant_4bit_nc", ()),
-     "Batch: baseline vs AutoTune pick (4bit)"),
+     "Batch: baseline vs tuned pick (4bit)"),
     ("batch", "auto_vs_aggressive",
      ("auto", ()), ("turboquant_3bit_nc", ()),
      "Batch: baseline vs aggressive 3bit"),
@@ -516,12 +516,12 @@ def main():
     print("=" * 100)
 
     for profile in PROFILE_NAMES:
-        autotune_keys = {
+        tuned_keys = {
             "chat": ("turboquant_k8v4", ()),
             "rag": ("turboquant_4bit_nc", (5,)),
             "batch": ("turboquant_4bit_nc", ()),
         }
-        at_key = autotune_keys[profile]
+        at_key = tuned_keys[profile]
         if at_key not in config_summary:
             continue
 
@@ -531,7 +531,7 @@ def main():
         base_ppl = base["fields"]["ppl"]
 
         print(f"\n  {profile.upper()}:")
-        print(f"    AutoTune pick: {at['label']}, R_mem={at['r_mem']:.2f}x")
+        print(f"    Tuned pick: {at['label']}, R_mem={at['r_mem']:.2f}x")
         if at_ppl[0] is not None and base_ppl[0] is not None:
             dppl = at_ppl[0] - base_ppl[0]
             dppl_pct = dppl / base_ppl[0] * 100

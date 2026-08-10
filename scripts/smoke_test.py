@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Phase-1 smoke test for AutoTuneTurboQuant.
+"""Phase-1 smoke test for KVCompressionTune.
 
 Verifies, on the actual cluster GPU, that:
   1. Every TurboQuant KV-cache preset in stock vLLM launches and generates

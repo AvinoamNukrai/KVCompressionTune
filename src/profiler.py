@@ -676,12 +676,8 @@ def run_experiment_0(
 
 def _detect_n_layers(model_name: str) -> int:
     """Detect number of layers from HuggingFace model config."""
-    from transformers import AutoConfig
-    config = AutoConfig.from_pretrained(model_name, trust_remote_code=True)
-    for attr in ("num_hidden_layers", "n_layer", "num_layers"):
-        if hasattr(config, attr):
-            return getattr(config, attr)
-    raise ValueError(f"Cannot detect layer count for {model_name}")
+    from .model_info import detect_n_layers  # noqa: PLC0415
+    return detect_n_layers(model_name)
 
 
 def generate_sensitivity_manifest(

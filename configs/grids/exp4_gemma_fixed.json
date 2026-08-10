@@ -1,0 +1,96 @@
+[
+  {
+    "model": "google/gemma-2-2b",
+    "kv_cache_dtype": "auto",
+    "skip_layers": [],
+    "rep": 0,
+    "trace_tag": "screen",
+    "trace_seed": 20260714,
+    "max_model_len": 8192
+  },
+  {
+    "model": "google/gemma-2-2b",
+    "kv_cache_dtype": "auto",
+    "skip_layers": [],
+    "rep": 1,
+    "trace_tag": "screen",
+    "trace_seed": 20260714,
+    "max_model_len": 8192
+  },
+  {
+    "model": "google/gemma-2-2b",
+    "kv_cache_dtype": "turboquant_k8v4",
+    "skip_layers": [],
+    "rep": 0,
+    "trace_tag": "screen",
+    "trace_seed": 20260714,
+    "max_model_len": 8192
+  },
+  {
+    "model": "google/gemma-2-2b",
+    "kv_cache_dtype": "turboquant_k8v4",
+    "skip_layers": [],
+    "rep": 1,
+    "trace_tag": "screen",
+    "trace_seed": 20260714,
+    "max_model_len": 8192
+  },
+  {
+    "model": "google/gemma-2-2b",
+    "kv_cache_dtype": "turboquant_4bit_nc",
+    "skip_layers": [],
+    "rep": 0,
+    "trace_tag": "screen",
+    "trace_seed": 20260714,
+    "max_model_len": 8192
+  },
+  {
+    "model": "google/gemma-2-2b",
+    "kv_cache_dtype": "turboquant_4bit_nc",
+    "skip_layers": [],
+    "rep": 1,
+    "trace_tag": "screen",
+    "trace_seed": 20260714,
+    "max_model_len": 8192
+  },
+  {
+    "model": "google/gemma-2-2b",
+    "kv_cache_dtype": "turboquant_4bit_nc",
+    "skip_layers": [
+      5
+    ],
+    "rep": 0,
+    "trace_tag": "screen",
+    "trace_seed": 20260714,
+    "max_model_len": 8192
+  },
+  {
+    "model": "google/gemma-2-2b",
+    "kv_cache_dtype": "turboquant_4bit_nc",
+    "skip_layers": [
+      5
+    ],
+    "rep": 1,
+    "trace_tag": "screen",
+    "trace_seed": 20260714,
+    "max_model_len": 8192
+  },
+  {
+    "model": "google/gemma-2-2b",
+    "kv_cache_dtype": "turboquant_3bit_nc",
+    "skip_layers": [],
+    "rep": 0,
+    "trace_tag": "screen",
+    "trace_seed": 20260714,
+    "max_model_len": 8192
+  },
+  {
+    "model": "google/gemma-2-2b",
+    "kv_cache_dtype": "turboquant_3bit_nc",
+    "skip_layers": [],
+    "rep": 1,
+    "trace_tag": "screen",
+    "trace_seed": 20260714,
+    "max_model_len": 8192
+  }
+]

@@ -27,9 +27,7 @@ from pathlib import Path
 # Constants
 # ---------------------------------------------------------------------------
 
-N_LAYERS = 36
-FLOOR_LAYERS = frozenset({0, 1, 34, 35})
-N_FLOOR = len(FLOOR_LAYERS)
+from .model_info import detect_n_layers, floor_layers_for
 
 PRESETS = ["k8v4", "4bit_nc", "k3v4_nc", "3bit_nc"]
 PRESET_FULL = {p: f"turboquant_{p}" for p in PRESETS}
@@ -50,14 +48,19 @@ PROFILES_CFG = load_profiles()
 # Layer ranking (loaded from Exp 0 or fallback)
 # ---------------------------------------------------------------------------
 
-def load_profiler_ranking(exp0_path: Path = Path("results/exp0/exp0_result.json"),
+def load_profiler_ranking(floor_layers: frozenset[int], n_layers: int,
+                          exp0_path: Path = Path("results/exp0/exp0_result.json"),
                           ) -> list[int]:
+    """Layers ranked by per-layer sensitivity, most sensitive first.
+
+    Falls back to positional order (works for any model/layer count) when
+    no Exp-0 ranking has been computed yet for this model.
+    """
     if exp0_path.exists():
         data = json.loads(exp0_path.read_text())
         full_ranking = data["policy"]["ranking"]
-        return [l for l in full_ranking if l not in FLOOR_LAYERS]
-    return [5, 33, 4, 8, 10, 11, 3, 2, 32, 30, 31, 29, 28, 27, 26, 25,
-            24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 9, 7, 6]
+        return [l for l in full_ranking if l not in floor_layers]
+    return [l for l in range(n_layers) if l not in floor_layers]
 
 
 def skip_layers_for_budget(ranking: list[int], budget: int) -> list[int]:
@@ -68,10 +71,10 @@ def skip_layers_for_budget(ranking: list[int], budget: int) -> list[int]:
 # Memory ratio (analytical)
 # ---------------------------------------------------------------------------
 
-def compute_r_mem(preset: str, n_protect: int) -> float:
-    s = N_FLOOR + n_protect
-    base = N_LAYERS * BYTES_PER_DIM["auto"]
-    cfg = s * BYTES_PER_DIM["auto"] + (N_LAYERS - s) * BYTES_PER_DIM[preset]
+def compute_r_mem(preset: str, n_protect: int, n_layers: int, n_floor: int) -> float:
+    s = n_floor + n_protect
+    base = n_layers * BYTES_PER_DIM["auto"]
+    cfg = s * BYTES_PER_DIM["auto"] + (n_layers - s) * BYTES_PER_DIM[preset]
     return base / cfg
 
 
@@ -188,7 +191,7 @@ def load_baseline(cells_dir: Path) -> dict:
 # ---------------------------------------------------------------------------
 
 def compute_utility(profile_name: str, metrics: dict, baseline: dict,
-                    preset: str, n_protect: int) -> float:
+                    preset: str, n_protect: int, n_layers: int, n_floor: int) -> float:
     pcfg = PROFILES_CFG[profile_name]
     if metrics["ppl"] is None or baseline["ppl"] is None:
         return 0.0
@@ -196,13 +199,17 @@ def compute_utility(profile_name: str, metrics: dict, baseline: dict,
     if dppl_rel > pcfg["ppl_threshold"]:
         return 0.0
 
-    r_mem = compute_r_mem(preset, n_protect)
+    r_mem = compute_r_mem(preset, n_protect, n_layers, n_floor)
+    # `is not None` (not truthiness): a literal 0.0 is a real, terrible
+    # measurement (e.g. zero throughput) and must not be mistaken for
+    # "not measured for this cell" and default to a neutral 1.0 gain.
     s_tpot = (baseline["chat_tpot_ms"] / metrics["chat_tpot_ms"]
-              if metrics.get("chat_tpot_ms") else 1.0)
+              if metrics.get("chat_tpot_ms") is not None else 1.0)
     s_ttft = (baseline["rag_ttft_ms"] / metrics["rag_ttft_ms"]
-              if metrics.get("rag_ttft_ms") else 1.0)
+              if metrics.get("rag_ttft_ms") is not None else 1.0)
     s_tp = (metrics["batch_tps"] / baseline["batch_tps"]
-            if metrics.get("batch_tps") and baseline.get("batch_tps") else 1.0)
+            if metrics.get("batch_tps") is not None and baseline.get("batch_tps")
+            else 1.0)
 
     gains = {"s_tpot": s_tpot, "s_ttft": s_ttft, "s_tp": s_tp, "r_mem": r_mem}
 
@@ -253,7 +260,7 @@ def fmt(v, d=3):
     return f"{v:.{d}f}" if v is not None else "N/A"
 
 
-def analyze(cells_dir: Path, ranking: list[int]):
+def analyze(cells_dir: Path, ranking: list[int], n_layers: int, n_floor: int):
     cells = load_cells(cells_dir, ranking)
     baseline = load_baseline(cells_dir)
     averaged = average_cells(cells)
@@ -281,10 +288,11 @@ def analyze(cells_dir: Path, ranking: list[int]):
 
         rows = []
         for r in averaged:
-            u = compute_utility(profile, r, baseline, r["preset"], r["n_protect"])
+            u = compute_utility(profile, r, baseline, r["preset"], r["n_protect"],
+                                n_layers, n_floor)
             dppl = ((r["ppl"] - baseline["ppl"]) / baseline["ppl"] * 100
                     if r["ppl"] and baseline["ppl"] else None)
-            rmem = compute_r_mem(r["preset"], r["n_protect"])
+            rmem = compute_r_mem(r["preset"], r["n_protect"], n_layers, n_floor)
             rows.append((r, u, dppl, rmem))
 
         rows.sort(key=lambda x: -x[1])
@@ -321,8 +329,8 @@ def analyze(cells_dir: Path, ranking: list[int]):
             if not r["ppl"]:
                 continue
             dppl = floor_row["ppl"] - r["ppl"]
-            rmem_floor = compute_r_mem(preset, 0)
-            rmem_this = compute_r_mem(preset, r["n_protect"])
+            rmem_floor = compute_r_mem(preset, 0, n_layers, n_floor)
+            rmem_this = compute_r_mem(preset, r["n_protect"], n_layers, n_floor)
             drmem = rmem_this - rmem_floor
             print(f"  {preset:<10} {r['n_protect']:>6} {fmt(r['ppl']):>7} "
                   f"{dppl:>+13.3f} {rmem_this:>5.2f} {drmem:>+6.2f}  "
@@ -426,11 +434,13 @@ def suggest_refinements(cells_dir: Path, ranking: list[int],
 # Optimize: Optuna study + optimal configs
 # ---------------------------------------------------------------------------
 
-def optimize(cells_dir: Path, ranking: list[int]):
+def optimize(cells_dir: Path, ranking: list[int], n_layers: int,
+            floor_layers: frozenset[int], model_name: str):
     import optuna
     from optuna.distributions import CategoricalDistribution, IntDistribution
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
+    n_floor = len(floor_layers)
 
     cells = load_cells(cells_dir, ranking)
     baseline = load_baseline(cells_dir)
@@ -444,7 +454,7 @@ def optimize(cells_dir: Path, ranking: list[int]):
         study = optuna.create_study(
             direction="maximize",
             sampler=optuna.samplers.TPESampler(seed=42),
-            study_name=f"autotune_{profile}",
+            study_name=f"kv_tune_{profile}",
         )
 
         distributions = {
@@ -453,7 +463,8 @@ def optimize(cells_dir: Path, ranking: list[int]):
         }
 
         for r in averaged:
-            u = compute_utility(profile, r, baseline, r["preset"], r["n_protect"])
+            u = compute_utility(profile, r, baseline, r["preset"], r["n_protect"],
+                                n_layers, n_floor)
             trial = optuna.trial.create_trial(
                 params={"preset": r["preset"], "n_protect": r["n_protect"]},
                 distributions=distributions,
@@ -479,40 +490,45 @@ def optimize(cells_dir: Path, ranking: list[int]):
               f"n_protect={best.params['n_protect']}, "
               f"utility={best.value:.4f}")
 
-    # Build optimal_configs.json
-    configs = {}
-    for profile in PROFILES_CFG:
-        best_u = 0.0
-        best_r = None
-        for r in averaged:
-            u = compute_utility(profile, r, baseline, r["preset"], r["n_protect"])
-            if u > best_u:
-                best_u = u
-                best_r = r
-        if best_r:
-            skip = skip_layers_for_budget(ranking, best_r["n_protect"])
-            configs[profile] = {
-                "kv_cache_dtype": PRESET_FULL[best_r["preset"]],
-                "skip_layers": skip,
-                "effective_skip_layers": sorted(set(skip) | FLOOR_LAYERS),
-                "n_protected_total": N_FLOOR + best_r["n_protect"],
-                "utility": round(best_u, 4),
-                "ppl": best_r["ppl"],
-                "r_mem": round(compute_r_mem(best_r["preset"], best_r["n_protect"]), 3),
-                "ppl_delta_pct": round(
-                    (best_r["ppl"] - baseline["ppl"]) / baseline["ppl"] * 100, 2
-                ) if best_r["ppl"] else None,
-                "evidence": {
-                    "chat_tpot_ms": best_r.get("chat_tpot_ms"),
-                    "rag_ttft_ms": best_r.get("rag_ttft_ms"),
-                    "batch_tps": best_r.get("batch_tps"),
-                    "needle_acc": best_r.get("needle_acc"),
-                },
-            }
-        else:
-            configs[profile] = {"viable": False, "reason": "no config meets PPL constraint"}
+    # Build optimal_configs.json (keyed by model, so multiple models can
+    # coexist in the same file — each `--model` run only touches its own key)
+    def _config_entry(r: dict, u: float) -> dict:
+        skip = skip_layers_for_budget(ranking, r["n_protect"])
+        return {
+            "kv_cache_dtype": PRESET_FULL[r["preset"]],
+            "skip_layers": skip,
+            "effective_skip_layers": sorted(set(skip) | floor_layers),
+            "n_protected_total": n_floor + r["n_protect"],
+            "utility": round(u, 4),
+            "ppl": r["ppl"],
+            "r_mem": round(compute_r_mem(r["preset"], r["n_protect"],
+                                         n_layers, n_floor), 3),
+            "ppl_delta_pct": round(
+                (r["ppl"] - baseline["ppl"]) / baseline["ppl"] * 100, 2
+            ) if r["ppl"] else None,
+            "evidence": {
+                "chat_tpot_ms": r.get("chat_tpot_ms"),
+                "rag_ttft_ms": r.get("rag_ttft_ms"),
+                "batch_tps": r.get("batch_tps"),
+                "needle_acc": r.get("needle_acc"),
+            },
+        }
 
-    configs["baseline"] = {
+    model_entry = {}
+    for profile in PROFILES_CFG:
+        scored = [(r, compute_utility(profile, r, baseline, r["preset"], r["n_protect"],
+                                      n_layers, n_floor))
+                  for r in averaged]
+        viable = sorted((pair for pair in scored if pair[1] > 0), key=lambda x: -x[1])
+        if viable:
+            # alternatives[0] is the champion; the rest are ranked fallbacks
+            # (e.g. for when the champion's preset is infeasible on some GPU).
+            alternatives = [_config_entry(r, u) for r, u in viable[:5]]
+            model_entry[profile] = {**alternatives[0], "alternatives": alternatives}
+        else:
+            model_entry[profile] = {"viable": False, "reason": "no config meets PPL constraint"}
+
+    model_entry["baseline"] = {
         "ppl": baseline["ppl"],
         "chat_tpot_ms": baseline["chat_tpot_ms"],
         "rag_ttft_ms": baseline["rag_ttft_ms"],
@@ -521,8 +537,12 @@ def optimize(cells_dir: Path, ranking: list[int]):
 
     out = Path("results/optimal_configs.json")
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(configs, indent=2))
-    print(f"\nOptimal configs saved to {out}")
+    all_configs = json.loads(out.read_text()) if out.exists() else {}
+    all_configs[model_name] = model_entry
+    out.write_text(json.dumps(all_configs, indent=2))
+    print(f"\nOptimal configs for {model_name} saved to {out}")
+
+    configs = model_entry  # for the summary print below
 
     # Summary
     print(f"\n{'=' * 70}")
@@ -548,6 +568,10 @@ def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--cells-dir", default="results/cells")
+    p.add_argument("--model", default="Qwen/Qwen3-4B",
+                   help="model whose layer count/floor to use (HF config lookup)")
+    p.add_argument("--n-layers", type=int, default=None,
+                   help="override detected layer count (skips the HF config lookup)")
     p.add_argument("--analyze", action="store_true",
                    help="Compute utilities from existing cells")
     p.add_argument("--suggest", type=int, metavar="N",
@@ -556,11 +580,15 @@ def main():
                    help="Full Optuna run + output optimal_configs.json")
     args = p.parse_args()
 
-    ranking = load_profiler_ranking()
+    n_layers = args.n_layers if args.n_layers is not None else detect_n_layers(args.model)
+    floor_layers = floor_layers_for(n_layers)
+    n_floor = len(floor_layers)
+
+    ranking = load_profiler_ranking(floor_layers, n_layers)
     cells_dir = Path(args.cells_dir)
 
     if args.analyze:
-        analyze(cells_dir, ranking)
+        analyze(cells_dir, ranking, n_layers, n_floor)
     elif args.suggest:
         manifest = suggest_refinements(cells_dir, ranking, args.suggest)
         out = Path("configs/grids/exp2_refinement.json")
@@ -569,9 +597,9 @@ def main():
         print(f"Refinement manifest: {len(manifest)} cells → {out}")
         print(f"\nRun: python -m src.harness --manifest {out}")
     elif args.optimize:
-        optimize(cells_dir, ranking)
+        optimize(cells_dir, ranking, n_layers, floor_layers, args.model)
     else:
-        analyze(cells_dir, ranking)
+        analyze(cells_dir, ranking, n_layers, n_floor)
         print("\n\nUse --suggest N to generate refinement trials, "
               "or --optimize for full Optuna analysis.")
 

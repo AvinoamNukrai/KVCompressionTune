@@ -1,0 +1,18 @@
+{
+ "config": {
+  "model": "google/gemma-2-2b",
+  "kv_cache_dtype": "turboquant_3bit_nc",
+  "skip_layers": [],
+  "max_model_len": 10240,
+  "gpu_memory_utilization": 0.85,
+  "chunk_size": 512,
+  "trace_tag": "screen",
+  "trace_seed": 20260714,
+  "rep": 0,
+  "ppl_docs": 4
+ },
+ "cell_hash": "d90823d72d2c655a",
+ "ok": false,
+ "error": "Traceback (most recent call last):\n  File \"<frozen runpy>\", line 198, in _run_module_as_main\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"/home/nukraia/llm_caching_project/AutoTune-TurboQuant/src/harness.py\", line 225, in <module>\n    main()\n  File \"/home/nukraia/llm_caching_project/AutoTune-TurboQuant/src/harness.py\", line 213, in main\n    result = run_cell_inprocess(CellConfig(**entry))\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/nukraia/llm_caching_project/AutoTune-TurboQuant/src/harness.py\", line 93, in run_cell_inprocess\n    llm = LLM(**engine_kwargs)\n          ^^^^^^^^^^^^^^^^^^^^\n  File \"/home/nukraia/.conda/envs/autotune/lib/python3.11/site-packages/vllm/entrypoints/llm.py\", line 381, in __init__\n    self.llm_engine = LLMEngine.from_engine_args(\n                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/nukraia/.conda/envs/autotune/lib/python3.11/site-packages/vllm/v1/engine/llm_engine.py\", line 162, in from_engine_args\n    vllm_config = engine_args.create_engine_config(usage_context)\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/nukraia/.conda/envs/autotune/lib/python3.11/site-packages/vllm/engine/arg_utils.py\", line 1669, in create_engine_config\n    model_config = self.create_model_config()\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/nukraia/.conda/envs/autotune/lib/python3.11/site-packages/vllm/engine/arg_utils.py\", line 1511, in create_model_config\n    return ModelConfig(\n           ^^^^^^^^^^^^\n  File \"/home/nukraia/.conda/envs/autotune/lib/python3.11/site-packages/pydantic/_internal/_dataclasses.py\", line 121, in __init__\n    s.__pydantic_validator__.validate_python(ArgsKwargs(args, kwargs), self_instance=s)\npydantic_core._pydantic_core.ValidationError: 1 validation error for ModelConfig\n  Value error, User-specified max_model_len (10240) is greater than the derived max_model_len (max_position_embeddings=8192.0 or model_max_length=None in model's config.json). To allow overriding this maximum, set the env var VLLM_ALLOW_LONG_MAX_MODEL_LEN=1. VLLM_ALLOW_LONG_MAX_MODEL_LEN must be used with extreme caution. If the model uses relative position encoding (RoPE), positions exceeding derived_max_model_len lead to nan. If the model uses absolute position encoding, positions exceeding derived_max_model_len will cause a CUDA array out-of-bounds error. [type=value_error, input_value=ArgsKwargs((), {'model': ...nderer_num_workers': 1}), input_type=ArgsKwargs]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error\n",
+ "cell_wall_s": 15.6
+}
