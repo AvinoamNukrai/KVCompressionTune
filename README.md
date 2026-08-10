@@ -1,7 +1,7 @@
 # KVCompressionTune
 
 **Course:** LLM Caching — Final Project  
-**Author:** Avinoam Nukrai  
+**Authors:** Avinoam Nukrai, Jad Mahajne  
 **Baseline:** Stock vLLM (>= 0.20) with TurboQuant KV-cache quantization
 
 ---
@@ -12,7 +12,7 @@ vLLM ships TurboQuant KV-cache quantization with **4 fixed presets** and a **har
 
 This project proves that it does. We show three things:
 
-1. **Layer sensitivity is non-uniform.** Layer 0 of Qwen3-4B is 10x more sensitive to quantization than any other layer. Layer 1 (protected by default) is essentially insensitive. The fixed protection rule wastes budget on safe layers and leaves sensitive layers exposed.
+1. **Layer sensitivity is non-uniform.** Layer 0 of Qwen3-4B is ~19x more sensitive to quantization than any other layer. Layer 1 (protected by default) is essentially insensitive. The fixed protection rule wastes budget on safe layers and leaves sensitive layers exposed.
 
 2. **Sensitivity is model-dependent.** 3-bit quantization costs +3.4% PPL on Qwen3-4B but +54.6% on Qwen3-1.7B — a 16x difference. The same preset that works on one model destroys another. There is no universal safe choice.
 

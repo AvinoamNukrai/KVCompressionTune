@@ -6,7 +6,7 @@
 #   apptainer build autotune-tq.sif docker://<this image after build+push>
 # A plain venv from requirements.txt is an equally supported path; this
 # image exists so the grader can reproduce without touching the host env.
-FROM vllm/vllm-openai:v0.20.2
+FROM vllm/vllm-openai:v0.21.0
 
 WORKDIR /workspace/autotune-turboquant
 COPY requirements.txt .

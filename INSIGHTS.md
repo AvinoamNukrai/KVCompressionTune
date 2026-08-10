@@ -100,7 +100,7 @@ Source: `src/profiler.py --mode full`, HuggingFace Transformers (not vLLM),
 8 WikiText calibration docs, 4 eval docs, 3-bit keys / 4-bit values,
 chunked PPL with 256-token chunks. Results in `results/exp0/`.
 
-22. **Layer 0 is 10× more sensitive than any other layer** (ΔPPL=+4.59 vs.
+22. **Layer 0 is ~19× more sensitive than any other layer** (ΔPPL=+4.59 vs.
     next-worst layer 34 at +0.24). quant_error=6.84 vs ~0.15 median. Layer 0
     must always be protected regardless of budget.
 23. **`simulated_quant_error` is the only feature that predicts sensitivity**

@@ -109,13 +109,15 @@ def _classify_protection(skip: list, ranking: list[int]) -> tuple[str, int]:
 
 
 def load_cells(cells_dir: Path, ranking: list[int],
-               include_positional: bool = False) -> list[CellMetrics]:
+               include_positional: bool = False, model: str | None = None) -> list[CellMetrics]:
     results = []
     for f in sorted(cells_dir.glob("*.json")):
         data = json.loads(f.read_text())
         if not data.get("ok"):
             continue
         cfg = data["config"]
+        if model is not None and cfg.get("model") != model:
+            continue
         dtype = cfg["kv_cache_dtype"]
         if dtype == "auto":
             continue
@@ -152,13 +154,15 @@ def load_cells(cells_dir: Path, ranking: list[int],
     return results
 
 
-def load_baseline(cells_dir: Path) -> dict:
+def load_baseline(cells_dir: Path, model: str | None = None) -> dict:
     baselines = []
     for f in sorted(cells_dir.glob("*.json")):
         data = json.loads(f.read_text())
         if not data.get("ok"):
             continue
         if data["config"]["kv_cache_dtype"] != "auto":
+            continue
+        if model is not None and data["config"].get("model") != model:
             continue
         chat = data.get("profiles", {}).get("chat", {})
         rag = data.get("profiles", {}).get("rag", {})
@@ -260,9 +264,10 @@ def fmt(v, d=3):
     return f"{v:.{d}f}" if v is not None else "N/A"
 
 
-def analyze(cells_dir: Path, ranking: list[int], n_layers: int, n_floor: int):
-    cells = load_cells(cells_dir, ranking)
-    baseline = load_baseline(cells_dir)
+def analyze(cells_dir: Path, ranking: list[int], n_layers: int, n_floor: int,
+           model: str | None = None):
+    cells = load_cells(cells_dir, ranking, model=model)
+    baseline = load_baseline(cells_dir, model=model)
     averaged = average_cells(cells)
 
     print("=" * 100)
@@ -368,9 +373,9 @@ def analyze(cells_dir: Path, ranking: list[int], n_layers: int, n_floor: int):
 # ---------------------------------------------------------------------------
 
 def suggest_refinements(cells_dir: Path, ranking: list[int],
-                        n_trials: int = 16) -> list[dict]:
-    cells = load_cells(cells_dir, ranking)
-    baseline = load_baseline(cells_dir)
+                        n_trials: int = 16, model: str | None = None) -> list[dict]:
+    cells = load_cells(cells_dir, ranking, model=model)
+    baseline = load_baseline(cells_dir, model=model)
     averaged = average_cells(cells)
     existing = {(c.preset, c.n_protect) for c in cells}
 
@@ -442,8 +447,8 @@ def optimize(cells_dir: Path, ranking: list[int], n_layers: int,
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     n_floor = len(floor_layers)
 
-    cells = load_cells(cells_dir, ranking)
-    baseline = load_baseline(cells_dir)
+    cells = load_cells(cells_dir, ranking, model=model_name)
+    baseline = load_baseline(cells_dir, model=model_name)
     averaged = average_cells(cells)
 
     for profile in PROFILES_CFG:
@@ -588,9 +593,9 @@ def main():
     cells_dir = Path(args.cells_dir)
 
     if args.analyze:
-        analyze(cells_dir, ranking, n_layers, n_floor)
+        analyze(cells_dir, ranking, n_layers, n_floor, model=args.model)
     elif args.suggest:
-        manifest = suggest_refinements(cells_dir, ranking, args.suggest)
+        manifest = suggest_refinements(cells_dir, ranking, args.suggest, model=args.model)
         out = Path("configs/grids/exp2_refinement.json")
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(manifest, indent=2))
@@ -599,7 +604,7 @@ def main():
     elif args.optimize:
         optimize(cells_dir, ranking, n_layers, floor_layers, args.model)
     else:
-        analyze(cells_dir, ranking, n_layers, n_floor)
+        analyze(cells_dir, ranking, n_layers, n_floor, model=args.model)
         print("\n\nUse --suggest N to generate refinement trials, "
               "or --optimize for full Optuna analysis.")
 
