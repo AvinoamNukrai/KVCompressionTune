@@ -1,7 +1,5 @@
 # KVCompressionTune
 
-**Course:** LLM Caching — Final Project  
-**Authors:** Avinoam Nukrai, Jad Mahajne  
 **Baseline:** Stock vLLM 0.21.0 with TurboQuant KV-cache quantization
 
 ---
@@ -91,3 +89,7 @@ This quick-start focuses on inspecting the committed results, running the tests,
 ## Technical Details
 
 See [SPEC.md](SPEC.md) for the full specification, experimental protocol, and statistical methodology. See [INSIGHTS.md](INSIGHTS.md) for the chronological findings log.
+
+Please see the paper for deep review and research findings. 
+
+Would love to hear any feedback at - avi.nukrai@gmail.com 
